@@ -1,0 +1,15 @@
+Source: linz-download-ta-bdys
+Maintainer: Jeremy Palmer <jpalmer@linz.govt.nz>
+Section: misc
+Priority: optional
+Build-Depends: python-all (>= 2.6.6-3), debhelper (>= 7.4.3)
+Homepage: http://www.linz.govt.nz
+Vcs-Svn: git://github.com/linz/download_ta_bdys.git
+Vcs-Browser: https://github.com/linz/download_ta_bdys
+
+Package: linz-download-ta-bdys
+Architecture: all
+Depends: ${misc:Depends}, ${python:Depends}, python-gdal
+Description: LINZ software to download NZ Territorial Authority
+ (TA) boundaries to a PostgreSQL/PostGIS Database
+
