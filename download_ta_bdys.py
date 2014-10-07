@@ -35,6 +35,11 @@ version_num = int(gdal.VersionInfo('VERSION_NUM'))
 if version_num < 1100000:
     sys.exit('ERROR: Python bindings of GDAL 1.10 or later required')
 
+# make sure gdal exceptions are not silent
+gdal.UseExceptions()
+osr.UseExceptions()
+ogr.UseExceptions()
+
 # translate geometry to 0-360 longitude space
 def shift_geom ( geom ):
     if geom is None:
@@ -100,15 +105,15 @@ def main():
     else:
         config_files = ['download_ta_bdys.ini']
     
+    parser = SafeConfigParser()
+    found = parser.read(config_files)
+    if not found:
+        sys.exit('Could not load config ' + config_files[0] )
+    
     # set up logging
     logging.config.fileConfig(config_files[0])
     logger = logging.getLogger()
 
-    parser = SafeConfigParser()
-    found = parser.read(config_files)
-    if not found:
-        logger.critical('Could not load config') 
-    
     db_host = None
     db_rolename = None
     db_port = None
@@ -148,9 +153,17 @@ def main():
     if parser.has_option('layer', 'shift_geometry'):
         shift_geometry = parser.getboolean('layer', 'shift_geometry')
     
-    output_srs = osr.SpatialReference()
-    output_srs.ImportFromEPSG(layer_output_srid)
+    try:
+        output_srs = osr.SpatialReference()
+        output_srs.ImportFromEPSG(layer_output_srid)
+    except:
+        logger.fatal("Output SRID %s is not valid" % (layer_output_srid))
+        sys.exit(1)
     
+    if create_grid and not grid_res > 0:
+        logger.fatal("Grid resolution must be greater than 0")
+        sys.exit(1)
+        
     #
     # Determine TA layer and its year from REST service
     #
@@ -182,14 +195,16 @@ def main():
             break
         
     if not ta_layer:
-        logger.critical('ERROR: Could not find the TA layer in ' + base_uri)
+        logger.fatal('Could not find the TA layer in ' + base_uri)
+        sys.exit(1)
     
     feature_url = base_uri + '/' + latest_service + '/MapServer/' + str(ta_layer['id']) + \
-        '/query?f=json&where=1=1&returnGeometry=true&outSR=' + str(output_srid)
+        '/query?f=json&where=1=1&returnGeometry=true&outSR=' + str(layer_output_srid)
     
     geojson_drv = ogr.GetDriverByName('GeoJSON')
     if geojson_drv is None:
-        logger.critical('ERROR: Could not load the OGR GeoJSON driver')
+        logger.fatal('Could not load the OGR GeoJSON driver')
+        sys.exit(1)
     
     #
     # Connect to the PostgreSQL database
@@ -197,7 +212,8 @@ def main():
     
     pg_drv = ogr.GetDriverByName('PostgreSQL')
     if pg_drv is None:
-        logger.critical('ERROR: Could not load the OGR PostgreSQL driver')
+        logger.fatal('Could not load the OGR PostgreSQL driver')
+        sys.exit(1)
     
     pg_uri = 'PG:dbname=' + db_name
     if db_host:
@@ -209,9 +225,13 @@ def main():
     if db_pass:
         pg_uri = pg_uri + ' password=' +  db_pass
     
-    pg_ds = pg_drv.Open(pg_uri, update = 1)
-    if pg_ds is None:
-        logger.critical("ERROR: Can't open PG output database: " + gdal.GetLastErrorMsg())
+    pg_ds = None
+    try:
+        pg_ds = pg_drv.Open(pg_uri, update = 1)
+    except Exception, e:
+        logger.fatal("Can't open PG output database: " + str(e))
+        sys.exit(1)
+    
     if db_rolename:
        pg_ds.ExecuteSQL("SET ROLE " + db_rolename)
     
@@ -245,9 +265,13 @@ def main():
         # truncate data
         pg_ds.ExecuteSQL("TRUNCATE " + full_layer_name)
     
-    geojs_ds = geojson_drv.Open(feature_url)
-    if geojs_ds is None:
-        logger.critical('ERROR: Could not load fetch feature URL ' + feature_url)
+    geojs_ds = None
+    try:
+        geojs_ds = geojson_drv.Open(feature_url)
+    except Exception, e:
+        logger.fatal('Could not load fetch feature URL %s: %s' % (feature_url, str(e)))
+        sys.exit(1)
+    
     input_lyr = geojs_ds.GetLayer(0)
     
     #
@@ -259,22 +283,21 @@ def main():
         if db_schema:
             create_opts.append('SCHEMA=' + db_schema)
         
-        output_lyr = pg_ds.CreateLayer(
-            full_layer_name,
-            srs = output_srs,
-            geom_type = ogr.wkbMultiPolygon,
-            options = create_opts
-        )
-    
-        if not output_lyr:
-            logger.critical("ERROR: Can't create TA output table: " + \
-                gdal.GetLastErrorMsg())    
-        
-        name_field = ogr.FieldDefn('name', ogr.OFTString)
-        name_field.SetWidth(100)
-        output_lyr.CreateField(name_field)
-        
-        pg_ds.ExecuteSQL("GRANT SELECT ON TABLE " + full_layer_name + " TO public")
+        try:
+            output_lyr = pg_ds.CreateLayer(
+                full_layer_name,
+                srs = output_srs,
+                geom_type = ogr.wkbMultiPolygon,
+                options = create_opts
+            )
+            name_field = ogr.FieldDefn('name', ogr.OFTString)
+            name_field.SetWidth(100)
+            output_lyr.CreateField(name_field)
+            
+            pg_ds.ExecuteSQL("GRANT SELECT ON TABLE " + full_layer_name + " TO public")
+        except Exception, e:
+            logger.fatal('Can not create TA output table: %s' % (str(e)))
+            sys.exit(1)
     
     input_defn = input_lyr.GetLayerDefn()
     p = re.compile('^TA\d{4}\_.+\_NAME$', flags = re.UNICODE)
@@ -285,7 +308,8 @@ def main():
         if p.search(field_name):
             ta_name_field = field_name
     if not ta_name_field:
-        logger.critical("ERROR: Can not find TA name field")
+        logger.fatal("Can not find TA name field")
+        sys.exit(1)
     
     gdal.SetConfigOption('PG_USE_COPY', 'YES')
     
@@ -320,13 +344,17 @@ def main():
     #
     
     if create_grid:
-        sql_lyr = pg_ds.ExecuteSQL("SELECT create_table_polygon_grid('%s', '%s', '%s', %d, %d) as result"
-            % (db_schema, layer_name, layer_geom_column, grid_res, grid_res) )
-        if sql_lyr:
-            feat = sql_lyr.GetNextFeature()
-            logger.info("Created grid layer: " + feat['result'])
-        else:
-            logger.critical("Failed to create grid layer")
+        sql = "SELECT create_table_polygon_grid('%s', '%s', '%s', %g, %g) as result" \
+              % (db_schema, layer_name, layer_geom_column, grid_res, grid_res)
+        logger.debug("Building grid with SQL" + sql)
+        try:
+            sql_lyr = pg_ds.ExecuteSQL(sql)
+            if sql_lyr:
+                feat = sql_lyr.GetNextFeature()
+                logger.info("Created grid layer: " + feat['result'])
+        except Exception, e:
+            logger.fatal("Failed to create grid layer: " + str(e))
+            sys.exit(1)
     
     logger.info("TA layer have been updated to version " + str(latest_year))
     sys.exit(0)
