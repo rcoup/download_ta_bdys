@@ -239,8 +239,13 @@ def main():
     # Check the current database TA table year. Only continue if data is old.
     #
     
+    output_lyr = None
     full_layer_name = db_schema + '.' + layer_name
-    output_lyr = pg_ds.GetLayerByName(full_layer_name)
+    try:
+        output_lyr = pg_ds.GetLayerByName(full_layer_name)
+    except:
+        logger.debug(full_layer_name + ' does not exist')
+    
     if output_lyr:
         sql = """SELECT
                     description
