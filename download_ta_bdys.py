@@ -351,7 +351,7 @@ def main():
     if create_grid:
         sql = "SELECT create_table_polygon_grid('%s', '%s', '%s', %g, %g) as result" \
               % (db_schema, layer_name, layer_geom_column, grid_res, grid_res)
-        logger.debug("Building grid with SQL" + sql)
+        logger.debug("Building grid with SQL " + sql)
         try:
             sql_lyr = pg_ds.ExecuteSQL(sql)
             if sql_lyr:
