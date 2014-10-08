@@ -6,7 +6,7 @@ SCRIPT=${0##*/}
 SUCCESS=0
 FAILURE=1
 
-PACKAGE=linz-download-ta-bdy
+PACKAGE=linz-download-ta-bdys
 PACKAGE_LOG_DIR=/var/log/$PACKAGE
 PACKAGE_USER=lds_bde
 

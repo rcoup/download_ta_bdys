@@ -111,7 +111,7 @@ def main():
         sys.exit('Could not load config ' + config_files[0] )
     
     # set up logging
-    logging.config.fileConfig(config_files[0])
+    logging.config.fileConfig(config_files[0], defaults={ 'hostname': socket.gethostname() })
     logger = logging.getLogger()
 
     db_host = None
