@@ -1,5 +1,5 @@
-linz-download-ta-bdys (1.0-1) unstable; urgency=low
+linz-download-ta-bdys (1.0-1) precise; urgency=low
 
   * source package created
 
- -- Jeremy Palmer <jpalmer@linz.govt.nz>  Sat, 27 Sep 2014 17:32:16 +1200
+ -- Jeremy Palmer <jpalmer@linz.govt.nz>  Thu, 09 Oct 2014 08:22:03 +1300
