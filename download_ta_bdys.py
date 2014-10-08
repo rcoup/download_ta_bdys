@@ -114,6 +114,8 @@ def main():
     logging.config.fileConfig(config_files[0], defaults={ 'hostname': socket.gethostname() })
     logger = logging.getLogger()
 
+    logger.info('Starting download TA boundaries')
+    
     db_host = None
     db_rolename = None
     db_port = None
