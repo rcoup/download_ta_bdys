@@ -1,4 +1,4 @@
 #!/usr/bin/make -f
 %:
-	dh $@ --with python-central
+	dh ${WITH_PYTHON2} $@
 
