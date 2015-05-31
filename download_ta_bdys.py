@@ -32,8 +32,15 @@ except:
         sys.exit('ERROR: cannot find python OGR and GDAL modules')
 
 version_num = int(gdal.VersionInfo('VERSION_NUM'))
-if version_num < 1100000:
-    sys.exit('ERROR: Python bindings of GDAL 1.10 or later required')
+
+# require version 1.11.2 or higher to resolve https://trac.osgeo.org/gdal/ticket/5538
+if version_num < 1110200:
+    sys.exit('ERROR: Python bindings of GDAL 1.11.2 or later required')
+
+# if GDAL 2.0 or higher then use retry option for HTTP 500 timeout issues
+if version_num >= 2000000:
+    gdal.SetConfigOption('GDAL_HTTP_RETRY_DELAY', '10')
+    gdal.SetConfigOption('GDAL_HTTP_MAX_RETRY', '5')
 
 # make sure gdal exceptions are not silent
 gdal.UseExceptions()
@@ -57,42 +64,6 @@ def shift_geom ( geom ):
                 x = x - 360
             geom.SetPoint( i, x, y, z )
     return
-
-#check is geometry ring is clockwise.
-def ring_is_clockwise(ring):
-    total = 0
-    i = 0
-    point_count = ring.GetPointCount()
-    pt1 = ring.GetPoint(i)
-    pt2 = None
-    for i in range(point_count-1):
-        pt2 = ring.GetPoint(i+1)
-        total += (pt2[0] - pt1[0]) * (pt2[1] + pt1[1])
-        pt1 = pt2
-    return (total >= 0)
-
-# this is required because of a bug in OGR http://trac.osgeo.org/gdal/ticket/5538
-def fix_esri_polyon(geom):
-    polygons = []
-    count = geom.GetGeometryCount()
-    if count > 0:
-        poly = None
-        for i in range( count ):
-            ring = geom.GetGeometryRef(i)
-            if ring_is_clockwise(ring):
-                poly = ogr.Geometry(ogr.wkbPolygon)
-                poly.AddGeometry(ring)
-                polygons.append(poly)
-            else:
-                poly.AddGeometry(ring)
-    new_geom = None
-    if  len(polygons) > 1:
-        new_geom = ogr.Geometry(ogr.wkbMultiPolygon)
-        for poly in polygons:
-            new_geom.AddGeometry(poly)
-    else:
-        new_geom = polygons.pop()
-    return new_geom
 
 def main():
     
@@ -331,12 +302,12 @@ def main():
     while input_feature is not None:
         output_feature = ogr.Feature(output_defn)
         output_feature['name'] = input_feature[ta_name_field]
-        fixed_geom = fix_esri_polyon(input_feature.GetGeometryRef())
-        if fixed_geom.GetGeometryType() == ogr.wkbPolygon:
-            fixed_geom = ogr.ForceToMultiPolygon(fixed_geom)
+        geom = input_feature.GetGeometryRef()
+        if geom.GetGeometryType() == ogr.wkbPolygon:
+            geom = ogr.ForceToMultiPolygon(geom)
         if output_srs.IsGeographic() and shift_geometry:
-            shift_geom(fixed_geom)
-        output_feature.SetGeometry(fixed_geom)
+            shift_geom(geom)
+        output_feature.SetGeometry(geom)
         output_lyr.CreateFeature(output_feature)
         output_feature.Destroy()
         input_feature = input_lyr.GetNextFeature()
