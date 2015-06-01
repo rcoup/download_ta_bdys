@@ -334,7 +334,7 @@ def main():
             logger.fatal("Failed to create grid layer: " + str(e))
             sys.exit(1)
     
-    logger.info("TA layer have been updated to version " + str(latest_year))
+    logger.info("TA layer has been updated to version " + str(latest_year))
     sys.exit(0)
 
 
