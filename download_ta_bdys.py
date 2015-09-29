@@ -73,6 +73,9 @@ def ring_is_clockwise(ring):
 
 # this is required because of a bug in OGR http://trac.osgeo.org/gdal/ticket/5538
 def fix_esri_polyon(geom):
+    if geom.GetGeometryType() == ogr.wkbMultiPolygon:
+        return geom
+
     polygons = []
     count = geom.GetGeometryCount()
     if count > 0:
